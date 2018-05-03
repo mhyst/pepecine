@@ -1,0 +1,203 @@
+#!/bin/bash
+#Pepecine webscrapper
+
+CODENAME="PC (Pepecine webscrapper)"
+VERSION="0.0.1"
+
+function docurl {
+	local urlfrom="$1"
+	local filename="$2"
+
+	curl "$urlfrom" > "$filename"
+	FILESIZE=$(stat -c%s "$filename")
+	while [[ $FILESIZE == 0 ]]; do
+		echo "La descarga ha fallado."
+		echo "Esperando 5 segundos antes de volver a intentarlo..."
+		sleep 5
+		curl "$urlfrom" > "$filename"
+		FILESIZE=$(stat -c%s "$filename")
+	done	
+}
+
+function userChoice() {
+
+	local limite=$1
+	local cadena="$2"
+	local reply
+	let reply=0
+
+	echo > /dev/tty
+	echo -n "$cadena " > /dev/tty
+	read reply < /dev/tty
+	echo > /dev/tty
+
+	#We see if the user entered a number such as we need
+	while [[ "$reply" -lt 0 ]] || [[ "$reply" -gt  $limite ]]; do
+
+		#We give advice to the user and exit
+		echo -n "Tiene que introducir un número de entre los indicados: " > /dev/tty
+		read reply < /dev/tty
+		#echo "Reply es: $reply" > /dev/tty
+
+	done
+
+	echo $reply
+}
+
+function filesize() {
+	local filename="$1"
+
+	local FILESIZE=$(stat -c%s "$filename")
+
+	echo $FILESIZE
+}
+
+
+mkdir /tmp/pepecine 2> /dev/null
+
+parms="$@"
+
+if [[ ${#parms} == 0 ]]; then
+	echo "pc (Pepecine webscrapper): debe indicar el nombre de la película que busca"
+	echo
+	exit 1
+fi
+
+echo "$CODENAME $VERSION - Copyleft (GPL v3) Julio Serrano 2017"
+echo "Extrae los enlaces de streaming para películas de Pepecine."
+echo
+
+
+parms=`tr ' ' '+' <<< $parms`
+echo "Parámetros de entrada: $parms"
+echo
+echo "Buscando..."
+echo
+docurl "https://pepecine.online/resultados-online?q=$parms" "/tmp/pepecine/search.txt"
+grep -a 'ver-online-pelicula' /tmp/pepecine/search.txt | grep -avnm12 'image' > /tmp/pepecine/urls
+grep -oP '<a.*?</a>' /tmp/pepecine/urls > /tmp/pepecine/urls2
+
+rm /tmp/pepecine/urls
+mv /tmp/pepecine/urls2 /tmp/pepecine/urls
+
+if [[ $(filesize "/tmp/pepecine/urls") == 0 ]]; then
+	echo
+	echo
+	echo "----------------------------------------------------------"
+	echo "ERROR: No se encontraron películas"
+	echo
+	echo "Esto puede ser porque no hay ninguna que coincida"
+	echo "con los argumentos de entrada."
+	echo "----------------------------------------------------------"
+	echo
+	exit 2
+fi
+
+echo
+echo "Procesando..."
+echo
+
+# Link filedescriptor 10 with stdin
+exec 10<&0
+# stdin replaced with a file supplied as a first argument
+exec < /tmp/pepecine/urls
+
+let i=0
+
+declare -a names
+declare -a urls
+
+echo "----------------------------------------------------------"
+echo "Se han encontrado las siguientes películas:"
+echo "----------------------------------------------------------"
+echo
+while read line; do
+	#Queremos la etiqueta title, pero sólo su contenido
+	names[$i]=`echo "$line" | grep -Po '">.*?</a>' | sed 's/\(">\|<\/a>\)//g'`
+	urls[$i]=`echo "$line" | grep -Po 'href=".*?"' | sed "s/\(href=\"\|\"\)//g"`
+
+	echo "$i:	${names[$i]}"
+   	((i++))
+done
+echo
+echo "----------------------------------------------------------"
+echo
+
+if [[ $i == 4 ]]; then
+	echo "  AVISO: Puede que los resultados no sean relevantes."
+	echo "  Cuando Pepecine no encuentra resultados, sugiere otros."
+	echo
+fi
+
+LIMITE=$(( ${#urls[*]} - 1 ))
+CHOSENID=$(userChoice $LIMITE "Seleccione la pelicula:")
+
+echo
+echo "Ha seleccionado: ${names[$CHOSENID]}"
+echo "El enlace preliminar es: ${urls[$CHOSENID]}"
+echo
+# restore stdin from filedescriptor 10
+# and close filedescriptor 10
+exec 0<&10 10<&-
+rm /tmp/pepecine/urls
+
+docurl "${urls[$CHOSENID]}" "/tmp/pepecine/prepeli.txt"
+url=`grep -oEm1 'https://pepecine.io/ver-pelicula/[0-9]{1,20}' /tmp/pepecine/prepeli.txt`
+
+docurl "$url" "/tmp/pepecine/peli.txt"
+echo
+grep -E 'getFavicon' /tmp/pepecine/peli.txt | grep -Eo "\(.*?\)" > /tmp/pepecine/enlaces
+
+
+if [[ $(filesize "/tmp/pepecine/enlaces") == 0 ]]; then
+	echo
+	echo
+	echo "------------------------------------------------------------"
+	echo "ERROR: Esta película no tiene enlaces"
+	echo
+	echo "Esto puede ser, o bien porque en efecto no hay enlaces,"
+	echo "o porque hay algún error en la captura."
+	echo "------------------------------------------------------------"
+	echo
+	exit 3
+fi
+
+
+# Link filedescriptor 10 with stdin
+exec 10<&0
+# stdin replaced with a file supplied as a first argument
+exec < /tmp/pepecine/enlaces
+
+let i=0
+
+declare -a enlaces
+
+echo "----------------------------------------------------------"
+echo "Enlaces disponibles:"
+echo "----------------------------------------------------------"
+echo
+while read line; do
+	#Queremos la etiqueta title, pero sólo su contenido
+	enlaces[$i]="${line:2:-2}"
+
+	echo "$i:	${enlaces[$i]}"
+   	((i++))
+done
+
+# restore stdin from filedescriptor 10
+# and close filedescriptor 10
+exec 0<&10 10<&-
+
+echo
+echo "----------------------------------------------------------"
+echo
+
+LIMITE=$(( ${#enlaces[*]} - 1 ))
+CHOSENID=$(userChoice $LIMITE "Seleccione el enlace:")
+
+echo
+echo "Su enlace es: ${enlaces[$CHOSENID]}"
+echo "Que disfrute de la película"
+echo
+
+mpv -fs "${enlaces[$CHOSENID]}"
