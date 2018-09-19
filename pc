@@ -73,8 +73,9 @@ echo "Parámetros de entrada: $parms"
 echo
 echo "Buscando..."
 echo
-docurl "https://pepecine.online/resultados-online?q=$parms" "/tmp/pepecine/search.txt"
-grep -a 'ver-online-pelicula' /tmp/pepecine/search.txt | grep -avnm12 'image' > /tmp/pepecine/urls
+#docurl "https://pepecine.online/resultados-online?q=$parms" "/tmp/pepecine/search.txt"
+docurl "https://pepecine.me/ver-online?q=$parms" "/tmp/pepecine/search.txt"
+grep -a 'ver-la-pelicula' /tmp/pepecine/search.txt | grep -avnm12 'image' > /tmp/pepecine/urls
 grep -oP '<a.*?</a>' /tmp/pepecine/urls > /tmp/pepecine/urls2
 
 rm /tmp/pepecine/urls
@@ -142,11 +143,11 @@ exec 0<&10 10<&-
 rm /tmp/pepecine/urls
 
 docurl "${urls[$CHOSENID]}" "/tmp/pepecine/prepeli.txt"
-url=`grep -oEm1 'https://pepecine.io/ver-pelicula/[0-9]{1,20}' /tmp/pepecine/prepeli.txt`
+#url=`grep -oEm1 'https://pepecine.io/ver-pelicula/[0-9]{1,20}' /tmp/pepecine/prepeli.txt`
 
-docurl "$url" "/tmp/pepecine/peli.txt"
+#docurl "$url" "/tmp/pepecine/prepeli.txt"
 echo
-grep -E 'getFavicon' /tmp/pepecine/peli.txt | grep -Eo "\(.*?\)" > /tmp/pepecine/enlaces
+grep -E 'getFavicon' /tmp/pepecine/prepeli.txt | grep -Eo "\(.*?\)" > /tmp/pepecine/enlaces
 
 
 if [[ $(filesize "/tmp/pepecine/enlaces") == 0 ]]; then
